@@ -1,0 +1,4 @@
+Scrcpy releases are here: https://github.com/Genymobile/scrcpy/releases
+Download latest scrcpy-win64.zip
+Extract all of the files from it
+Put all of those files here
