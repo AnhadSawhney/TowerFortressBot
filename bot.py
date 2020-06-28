@@ -90,12 +90,27 @@ def findplayer(img): #returns coords of player and player tracker image
         #return Point(75, int(keypoints[0].pt[1])+170), playerimg
         return Point(int(keypoints[0].pt[0]), int(keypoints[0].pt[1])+340), thresh
 
+def findwalls(img): #returns 16x16 matrix of tiles and wall-less image
+    hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 245, 160)) #wall
+    thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 130, 0), (180, 245, 160)), 0, 255) #wall
+    thresh[np.where((img == 0).all(axis=2))] = 255
+
+    out = np.zeros((32, 32))
+
+    for x in range(32):
+        for y in range(32):
+            if np.sum(thresh[y*8:(y+1)*8, x*8:(x+1)*8]) >= 255*20:
+                out[y, x] = 1
+    
+    return out, cv2.subtract(img, cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR))
+
 def findenemies(img): #returns list of enemy coords
     #img = cv2.GaussianBlur(img,(3,3), cv2.BORDER_DEFAULT)
     hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 245, 160)) #wall
     thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 130, 0), (180, 245, 160)), 0, 255) #wall
-    
+    thresh[np.where((img == 0).all(axis=2))] = 255
     #thresh = np.copy(img)
     #thresh[thresh >= 128] = 255
     #[thresh < 128] = 0
@@ -105,8 +120,16 @@ def findenemies(img): #returns list of enemy coords
     #keypoints = enemydetector.detect(thresh)
     #thresh = cv2.drawKeypoints(thresh, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     
-    return thresh, img
+    return img
 
+def drawview(arr):
+    out = np.zeros((256, 256, 3))
+    for x in range(32):
+        for y in range(32):
+            if arr[y, x] == 1:
+                out[y*8:(y+1)*8, x*8:(x+1)*8, 2] = 255
+
+    return out
 
 playercoords = Point(150, 400)
 firstrun = True
@@ -133,13 +156,18 @@ with mss() as sct:
         else:
             cropimg = np.copy(img[playercoords.y-128:playercoords.y+128, playercoords.x-128:playercoords.x+128])
 
-        enemyimg, cropimg = findenemies(cropimg)
+        arr, cropimg = findwalls(cropimg)
+
+        view = drawview(arr)
+
+        enemyimg = findenemies(cropimg)
         
         #print('fps: {0}'.format(1 / (time.time()-last_time)))
         #print(np.shape(img[playercoords.y-64:playercoords.y+64, playercoords.x-64:playercoords.x+64]))
         cv2.imshow('test', cropimg)
-        cv2.imshow('test2', playerimg)
-        cv2.imshow('test3', enemyimg)
+        cv2.imshow('player', playerimg)
+        cv2.imshow('enemies', enemyimg)
+        cv2.imshow('view', view)
         if cv2.waitKey(25) & 0xFF == ord('q'):
             cv2.imwrite('image.png',cropimg)
             cv2.destroyAllWindows()
