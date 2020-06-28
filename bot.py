@@ -78,6 +78,10 @@ enemyparams.filterByInertia = False
 
 enemydetector = cv2.SimpleBlobDetector_create(enemyparams)
 
+blocksize = 16
+viewdiameter = 16
+viewradius = 8
+
 def findplayer(img): #returns coords of player and player tracker image
     #img = img[340:510]
     hsvimg = cv2.cvtColor(img[340:510], cv2.COLOR_BGR2HSV)
@@ -88,19 +92,19 @@ def findplayer(img): #returns coords of player and player tracker image
         return Point(-1, -1), thresh
     else:
         #return Point(75, int(keypoints[0].pt[1])+170), playerimg
-        return Point(int(keypoints[0].pt[0]), int(keypoints[0].pt[1])+340), thresh
+        return Point(int(keypoints[0].pt[0]), int(keypoints[0].pt[1])+345), thresh
 
 def findwalls(img): #returns 16x16 matrix of tiles and wall-less image
     hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 245, 160)) #wall
+    thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 255, 180)) #wall
     thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 130, 0), (180, 245, 160)), 0, 255) #wall
     thresh[np.where((img == 0).all(axis=2))] = 255
 
-    out = np.zeros((32, 32))
+    out = np.zeros((viewdiameter, viewdiameter))
 
-    for x in range(32):
-        for y in range(32):
-            if np.sum(thresh[y*8:(y+1)*8, x*8:(x+1)*8]) >= 255*20:
+    for x in range(viewdiameter):
+        for y in range(viewdiameter):
+            if np.sum(thresh[y*blocksize:(y+1)*blocksize, x*blocksize:(x+1)*blocksize]) >= 255*blocksize*blocksize*0.6:
                 out[y, x] = 1
     
     return out, cv2.subtract(img, cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR))
@@ -123,11 +127,11 @@ def findenemies(img): #returns list of enemy coords
     return img
 
 def drawview(arr):
-    out = np.zeros((256, 256, 3))
-    for x in range(32):
-        for y in range(32):
+    out = np.zeros((viewdiameter*blocksize, viewdiameter*blocksize, 3))
+    for x in range(viewdiameter):
+        for y in range(viewdiameter):
             if arr[y, x] == 1:
-                out[y*8:(y+1)*8, x*8:(x+1)*8, 2] = 255
+                out[y*blocksize:(y+1)*blocksize, x*blocksize:(x+1)*blocksize, 2] = 255
 
     return out
 
@@ -145,17 +149,21 @@ with mss() as sct:
             #if tempcoords.distanceTo(playercoords) < 30 or firstrun:
                 playercoords = tempcoords            
         
-        if playercoords.x-128 < 0:
-            width = playercoords.x+128
-            cropimg = np.zeros((256, 256, 3), dtype=np.uint8)
-            cropimg[:, 256-width:] = np.copy(img[playercoords.y-128:playercoords.y+128, 0:width])
-        elif playercoords.x+128 > rect['width']:
-            width = rect['width']-playercoords.x+128
-            cropimg = np.zeros((256, 256, 3), dtype=np.uint8)
-            cropimg[:, :width] = img[playercoords.y-128:playercoords.y+128, playercoords.x-128:rect['width']]
+        if playercoords.x-viewradius*blocksize < 0:
+            width = playercoords.x+viewradius*blocksize
+            cropimg = np.zeros((viewdiameter*blocksize, viewdiameter*blocksize, 3), dtype=np.uint8)
+            cropimg[:, viewdiameter*blocksize-width:] = np.copy(img[playercoords.y-viewradius*blocksize:playercoords.y+viewradius*blocksize, 0:width])
+        elif playercoords.x+viewradius*blocksize > rect['width']:
+            width = rect['width']-playercoords.x+viewradius*blocksize
+            cropimg = np.zeros((viewdiameter*blocksize, viewdiameter*blocksize, 3), dtype=np.uint8)
+            cropimg[:, :width] = img[playercoords.y-viewradius*blocksize:playercoords.y+viewradius*blocksize, playercoords.x-128:rect['width']]
         else:
-            cropimg = np.copy(img[playercoords.y-128:playercoords.y+128, playercoords.x-128:playercoords.x+128])
+            cropimg = np.copy(img[playercoords.y-viewradius*blocksize:playercoords.y+viewradius*blocksize, playercoords.x-viewradius*blocksize:playercoords.x+viewradius*blocksize])
 
+        for x in range(viewdiameter):
+            for y in range(viewdiameter):
+                cropimg[y*blocksize:y*blocksize+1, x*blocksize:x*blocksize+1] = (255, 255, 255)
+        
         arr, cropimg = findwalls(cropimg)
 
         view = drawview(arr)
