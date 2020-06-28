@@ -37,7 +37,7 @@ def launch():
                             '--stay-awake '+
                             '--max-fps 60 '+
                             '--bit-rate 16M '+
-                            '--max-size 670 '+
+                            '--max-size 780 '+
                             '--window-title '+title+'-Device ', shell=True)
 
     time.sleep(2)
@@ -78,9 +78,11 @@ enemyparams.filterByInertia = False
 
 enemydetector = cv2.SimpleBlobDetector_create(enemyparams)
 
-blocksize = 16
-viewdiameter = 16
+blocksize = 14
 viewradius = 8
+viewdiameter = 2*viewradius
+boxradius = viewradius*blocksize
+boxdiameter = viewdiameter*blocksize
 
 def findplayer(img): #returns coords of player and player tracker image
     #img = img[340:510]
@@ -96,15 +98,15 @@ def findplayer(img): #returns coords of player and player tracker image
 
 def findwalls(img): #returns 16x16 matrix of tiles and wall-less image
     hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 255, 180)) #wall
-    thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 130, 0), (180, 245, 160)), 0, 255) #wall
+    thresh = cv2.inRange(hsvimg, (0, 80, 0), (20, 255, 180)) #wall
+    thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 100, 0), (180, 245, 160)), 0, 255) #wall
     thresh[np.where((img == 0).all(axis=2))] = 255
 
     out = np.zeros((viewdiameter, viewdiameter))
 
     for x in range(viewdiameter):
         for y in range(viewdiameter):
-            if np.sum(thresh[y*blocksize:(y+1)*blocksize, x*blocksize:(x+1)*blocksize]) >= 255*blocksize*blocksize*0.6:
+            if np.sum(thresh[y*blocksize:(y+1)*blocksize, x*blocksize:(x+1)*blocksize]) >= 255*blocksize*blocksize*0.7:
                 out[y, x] = 1
     
     return out, cv2.subtract(img, cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR))
@@ -112,8 +114,8 @@ def findwalls(img): #returns 16x16 matrix of tiles and wall-less image
 def findenemies(img): #returns list of enemy coords
     #img = cv2.GaussianBlur(img,(3,3), cv2.BORDER_DEFAULT)
     hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 245, 160)) #wall
-    thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 130, 0), (180, 245, 160)), 0, 255) #wall
+    thresh = cv2.inRange(hsvimg, (0, 70, 0), (30, 245, 160)) #wall
+    thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 70, 0), (180, 245, 160)), 0, 255) #wall
     thresh[np.where((img == 0).all(axis=2))] = 255
     #thresh = np.copy(img)
     #thresh[thresh >= 128] = 255
@@ -127,7 +129,7 @@ def findenemies(img): #returns list of enemy coords
     return img
 
 def drawview(arr):
-    out = np.zeros((viewdiameter*blocksize, viewdiameter*blocksize, 3))
+    out = np.zeros((boxdiameter, boxdiameter, 3))
     for x in range(viewdiameter):
         for y in range(viewdiameter):
             if arr[y, x] == 1:
@@ -146,19 +148,23 @@ with mss() as sct:
         img = cv2.bilateralFilter(img, 5, 75, 75) 
         tempcoords, playerimg = findplayer(np.copy(img))
         if tempcoords != Point(-1, -1):
+            if abs(tempcoords.y-playercoords.y) > 5:
+                playercoords.y = tempcoords.y
+            if abs(tempcoords.x-playercoords.x) > 1:
+                playercoords.x = tempcoords.x
             #if tempcoords.distanceTo(playercoords) < 30 or firstrun:
-                playercoords = tempcoords            
+                #playercoords = tempcoords            
         
-        if playercoords.x-viewradius*blocksize < 0:
-            width = playercoords.x+viewradius*blocksize
-            cropimg = np.zeros((viewdiameter*blocksize, viewdiameter*blocksize, 3), dtype=np.uint8)
-            cropimg[:, viewdiameter*blocksize-width:] = np.copy(img[playercoords.y-viewradius*blocksize:playercoords.y+viewradius*blocksize, 0:width])
-        elif playercoords.x+viewradius*blocksize > rect['width']:
-            width = rect['width']-playercoords.x+viewradius*blocksize
-            cropimg = np.zeros((viewdiameter*blocksize, viewdiameter*blocksize, 3), dtype=np.uint8)
-            cropimg[:, :width] = img[playercoords.y-viewradius*blocksize:playercoords.y+viewradius*blocksize, playercoords.x-128:rect['width']]
+        if playercoords.x-boxradius < 0:
+            width = playercoords.x+boxradius
+            cropimg = np.zeros((boxdiameter, boxdiameter, 3), dtype=np.uint8)
+            cropimg[:, boxdiameter-width:] = np.copy(img[playercoords.y-boxradius:playercoords.y+boxradius, 0:width])
+        elif playercoords.x+boxradius > rect['width']:
+            width = rect['width']-playercoords.x+boxradius
+            cropimg = np.zeros((boxdiameter, boxdiameter, 3), dtype=np.uint8)
+            cropimg[:, :width] = img[playercoords.y-boxradius:playercoords.y+boxradius, playercoords.x-boxradius:rect['width']]
         else:
-            cropimg = np.copy(img[playercoords.y-viewradius*blocksize:playercoords.y+viewradius*blocksize, playercoords.x-viewradius*blocksize:playercoords.x+viewradius*blocksize])
+            cropimg = np.copy(img[playercoords.y-boxradius:playercoords.y+boxradius, playercoords.x-boxradius:playercoords.x+boxradius])
 
         for x in range(viewdiameter):
             for y in range(viewdiameter):
