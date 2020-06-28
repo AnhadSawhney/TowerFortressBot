@@ -32,12 +32,12 @@ title = 'TowerFortressBot'
 
 def launch():
     rect = {}
-    deviceproc = subprocess.Popen('scrcpy-win64-v1.14\\scrcpy.exe '+
+    deviceproc = subprocess.Popen('scrcpy\\scrcpy.exe '+
                             '--always-on-top '+
                             '--stay-awake '+
                             '--max-fps 60 '+
                             '--bit-rate 16M '+
-                            '--max-size 334 '+
+                            '--max-size 670 '+
                             '--window-title '+title+'-Device ', shell=True)
 
     time.sleep(2)
@@ -57,38 +57,58 @@ playerparams = cv2.SimpleBlobDetector_Params()
 
 playerparams.filterByColor = False
 playerparams.filterByArea = True
-playerparams.minArea = 100
-playerparams.maxArea = 500
+playerparams.minArea = 1000
+playerparams.maxArea = 2000
 playerparams.filterByCircularity = False
 playerparams.filterByConvexity = False
 playerparams.filterByInertia = False
 
 playerdetector = cv2.SimpleBlobDetector_create(playerparams)
 
-#enemydetector = cv2.SimpleBlobDetector_create(self.config['blob_det_params'])
+enemyparams = cv2.SimpleBlobDetector_Params()
+
+enemyparams.filterByColor = False
+enemyparams.filterByArea = True
+enemyparams.minArea = 150
+enemyparams.maxArea = 300
+enemyparams.filterByCircularity = True
+enemyparams.minCircularity = 0.2
+enemyparams.filterByConvexity = False
+enemyparams.filterByInertia = False
+
+enemydetector = cv2.SimpleBlobDetector_create(enemyparams)
 
 def findplayer(img): #returns coords of player and player tracker image
-    playerimg = np.copy(img[170:255])
-    playerimg[playerimg[:,:,0] >= 110] = [255, 255, 255]
-    playerimg[playerimg[:,:,0] < 110] = [0, 0, 0]
-    
-##    bwimg = np.zeros(np.shape(playerimg)[0:2], dtype=np.uint8)
-##    #bwimg[np.where(playerimg[:,:,2] > 50)] = 1 #some red
-##    #bwimg[np.where(playerimg[:,:,2] < 50)] = 1 #some red
-##    bwimg = np.where(playerimg[:,:,0] >= 110) #lots of blue
-##    playerimg[bwimg]
-##    playerimg = cv2.cvtColor(bwimg, cv2.COLOR_GRAY2BGR); 
-    keypoints = playerdetector.detect(playerimg)
-    playerimg = cv2.drawKeypoints(playerimg, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    #img = img[340:510]
+    hsvimg = cv2.cvtColor(img[340:510], cv2.COLOR_BGR2HSV)
+    thresh = cv2.inRange(hsvimg, (95, 100, 100), (140, 255, 255))
+    keypoints = playerdetector.detect(thresh)
+    thresh = cv2.drawKeypoints(thresh, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     if keypoints == []:
-        return Point(-1, -1), playerimg
+        return Point(-1, -1), thresh
     else:
         #return Point(75, int(keypoints[0].pt[1])+170), playerimg
-        return Point(int(keypoints[0].pt[0]), int(keypoints[0].pt[1])+170), playerimg
+        return Point(int(keypoints[0].pt[0]), int(keypoints[0].pt[1])+340), thresh
 
-#def findenemies(img): #returns list of enemy coords
+def findenemies(img): #returns list of enemy coords
+    #img = cv2.GaussianBlur(img,(3,3), cv2.BORDER_DEFAULT)
+    hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    thresh = cv2.inRange(hsvimg, (0, 130, 0), (20, 245, 160)) #wall
+    thresh = np.clip(thresh+cv2.inRange(hsvimg, (140, 130, 0), (180, 245, 160)), 0, 255) #wall
+    
+    #thresh = np.copy(img)
+    #thresh[thresh >= 128] = 255
+    #[thresh < 128] = 0
+    #thresh = cv2.inRange(hsvimg, (45, 0, 60), (80, 255, 255)) #green
+    #thresh = np.clip(thresh+cv2.inRange(hsvimg, (0, 0, 60), (5, 255, 255)), 0, 255)
+    #thresh = np.clip(thresh+cv2.inRange(hsvimg, (135, 0, 60), (180, 255, 255)), 0, 255)
+    #keypoints = enemydetector.detect(thresh)
+    #thresh = cv2.drawKeypoints(thresh, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    
+    return thresh, img
 
-playercoords = Point(75, 200)
+
+playercoords = Point(150, 400)
 firstrun = True
 
 with mss() as sct:
@@ -96,30 +116,32 @@ with mss() as sct:
     while True:
         last_time = time.time()
         img = np.array(sct.grab(rect))[:, :, :3]
-        tempcoords, playerimg = findplayer(img)
+        img = cv2.bilateralFilter(img, 5, 75, 75) 
+        tempcoords, playerimg = findplayer(np.copy(img))
         if tempcoords != Point(-1, -1):
-            if tempcoords.distanceTo(playercoords) < 20 or firstrun:
+            #if tempcoords.distanceTo(playercoords) < 30 or firstrun:
                 playercoords = tempcoords            
         
-        if playercoords.x-64 < 0:
-            width = playercoords.x+64
-            cropimg = np.zeros((128, 128, 3), dtype=np.uint8)
-            cropimg[:, 128-width:] = np.copy(img[playercoords.y-64:playercoords.y+64, 0:width])
-        elif playercoords.x+64 > rect['width']:
-            width = rect['width']-playercoords.x+64
-            cropimg = np.zeros((128, 128, 3), dtype=np.uint8)
-            cropimg[:, :width] = img[playercoords.y-64:playercoords.y+64, playercoords.x-64:rect['width']]
+        if playercoords.x-128 < 0:
+            width = playercoords.x+128
+            cropimg = np.zeros((256, 256, 3), dtype=np.uint8)
+            cropimg[:, 256-width:] = np.copy(img[playercoords.y-128:playercoords.y+128, 0:width])
+        elif playercoords.x+128 > rect['width']:
+            width = rect['width']-playercoords.x+128
+            cropimg = np.zeros((256, 256, 3), dtype=np.uint8)
+            cropimg[:, :width] = img[playercoords.y-128:playercoords.y+128, playercoords.x-128:rect['width']]
         else:
-            cropimg = np.copy(img[playercoords.y-64:playercoords.y+64, playercoords.x-64:playercoords.x+64])
+            cropimg = np.copy(img[playercoords.y-128:playercoords.y+128, playercoords.x-128:playercoords.x+128])
 
-        
+        enemyimg, cropimg = findenemies(cropimg)
         
         #print('fps: {0}'.format(1 / (time.time()-last_time)))
         #print(np.shape(img[playercoords.y-64:playercoords.y+64, playercoords.x-64:playercoords.x+64]))
         cv2.imshow('test', cropimg)
         cv2.imshow('test2', playerimg)
+        cv2.imshow('test3', enemyimg)
         if cv2.waitKey(25) & 0xFF == ord('q'):
-            cv2.imwrite('image.png',img)
+            cv2.imwrite('image.png',cropimg)
             cv2.destroyAllWindows()
             deviceproc.kill()
             win32gui.PostMessage(handle,win32con.WM_CLOSE,0,0)
