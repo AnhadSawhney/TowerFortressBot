@@ -69,7 +69,7 @@ enemyparams = cv2.SimpleBlobDetector_Params()
 
 enemyparams.filterByColor = False
 enemyparams.filterByArea = True
-enemyparams.minArea = 200
+enemyparams.minArea = 150
 enemyparams.maxArea = 800
 enemyparams.filterByCircularity = False
 enemyparams.filterByConvexity = False
@@ -87,7 +87,6 @@ def findplayer(img, arr): #returns coords of player
     #playerlessimg = np.copy(img)
     hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     thresh = cv2.inRange(hsvimg, (95, 100, 100), (140, 255, 255))
-    #playerlessimg = cv2.subtract(playerlessimg, cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR))
 
     arr[viewradius-2:viewradius+2, viewradius-2:viewradius+2] = [[0, 1, 1, 0],
                                                                  [1, 1, 1, 1],
@@ -95,7 +94,7 @@ def findplayer(img, arr): #returns coords of player
                                                                  [0, 1, 1, 0]]
     
     keypoints = playerdetector.detect(thresh)
-    thresh = cv2.drawKeypoints(thresh, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    thresh = cv2.drawKeypoints(thresh, keypoints, np.array([]), (255,0,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     if keypoints == []:
         return Point(-1, -1), thresh#, playerlessimg
     else:
@@ -127,6 +126,11 @@ def findenemies(img, offset, arr): #given wall-less image, returns list of enemy
     #thresh = np.copy(img)
     #thresh[thresh >= 128] = 255
     #thresh[thresh < 128] = 0
+
+
+    #TODO: Find enemies just based on everything in the image that is bright enough, except chests and torches
+    
+    
     hsvimg = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     thresh = np.zeros(np.shape(img)[0:2])
     thresh[img[:,:,2] > 140] = 255 #reds of eyes
@@ -134,11 +138,11 @@ def findenemies(img, offset, arr): #given wall-less image, returns list of enemy
     thresh[img[:,:,1] > 5] = 0
     thresh = cv2.inRange(hsvimg, (45, 1, 60), (80, 255, 255)) #green
     thresh = np.clip(thresh+cv2.inRange(hsvimg, (135, 1, 60), (180, 255, 255)), 0, 255) #whites of eyes
-    #thresh = np.clip(thresh+cv2.inRange(hsvimg, (135, 1, 60), (180, 255, 255)), 0, 255) #spider legs
+    thresh = np.clip(thresh+cv2.inRange(hsvimg, (75, 100, 100), (110, 145, 145)), 0, 255) #spider legs
     keypoints = enemydetector.detect(thresh)
     thresh = cv2.drawKeypoints(thresh, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     
-    return thresh
+    return img#thresh
 
 def drawview(arr):
     out = np.zeros((boxdiameter, boxdiameter, 3))
@@ -174,7 +178,8 @@ with mss() as sct:
         offset = Point(round(playercoords.x/blocksize)*blocksize - boxradius, round(playercoords.y/blocksize)*blocksize - boxradius) #round to nearest boxsize, subtract viewradius
        
         arr, walllessimg = findwalls(img, offset, arr)
-        enemyimg = findenemies(walllessimg, offset, arr)
+        playerlessimg = cv2.subtract(walllessimg, playerimg)
+        enemyimg = findenemies(playerlessimg, offset, arr)
         view = drawview(arr)
 
         maxy, maxx = np.shape(walllessimg)[0:2]
